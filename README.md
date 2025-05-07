@@ -34,7 +34,7 @@ sudo apt install python3-serial
 Clone the repository:
 
 ```sh
-git clone https://github.com/yourusername/uecprds.git
+git clone https://github.com/bkram/uecprds.git
 cd uecprds
 ```
 
