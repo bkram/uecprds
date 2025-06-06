@@ -1,0 +1,30 @@
+---
+serial_port: /dev/ttyUSB0
+baudrate: 9600
+# 📻 Station Identification
+program_service_names:
+  - "VERONICA"
+program_identification_code: 0x83E1
+program_type_code: 10
+rds_music_flag: true
+
+# 🎶 PS (Program Service) Settings
+center_ps_display: false
+ps_scroll_enabled: false
+ps_scroll_bidirectional: false
+ps_scroll_speed_seconds: 1
+ps_display_delay_seconds: 2
+
+# 💬 RT (Radiotext) Settings
+radiotext_messages:
+  - "VERONICA"
+  - "JOIN THE CLUB"
+center_radiotext_display: true
+radiotext_change_interval_seconds: 8
+
+# 🧠 DI (Decoder Identification) Flags
+rds_di:
+  stereo: true
+  compressed: true
+  artificial_head: false
+  dynamic_pty: false
