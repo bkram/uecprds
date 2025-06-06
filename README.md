@@ -1,6 +1,7 @@
 # uecprds
 
-A lightweight Python class for sending simple UECP RDS commands over a serial connection.
+UECPRDS provides a small Python library and helper daemon for sending UECP RDS
+commands over a serial connection.
 
 Created by reverse-engineering the serial communication of the **"EP-RDS v1.2"** Windows tool by *Klabautermann*.
 
@@ -14,7 +15,9 @@ Tested with the **Profline SFM RDS** built-in encoder, but it should also work w
 - Build and send properly framed **UECP messages**.
 - Includes **byte-stuffing** and **CRC-16-CCITT checksum**.
 - Simple and readable **serial communication**.
-- Suitable for **automation** and **command-line integration**.
+- Suitable for **automation** and **command-line integration**. A ready to use
+  daemon (`rdsd.py`) periodically sends Radiotext and Program Service data based
+  on a YAML configuration file.
 
 ---
 
@@ -44,18 +47,19 @@ cd uecprds
 
 ## ▶️ Usage
 
-1. Modify the `example.py` file if needed to customize the RDS parameters.
-2. Run the example script:
+1. Create or modify a YAML configuration file. A sample is provided in
+   `examples/veronica.yml`.
+2. Start the daemon with the configuration:
 
 ```bash
-python3 example.py
+python3 rdsd.py --cfg examples/veronica.yml
 ```
 
 ---
 
-## 📖 Example
+## 📖 Library Example
 
-The following example demonstrates how to configure and send RDS frames:
+The snippet below shows how to use the `UECPRDS` class directly:
 
 ```python
 from uecprds import UECPRDS
