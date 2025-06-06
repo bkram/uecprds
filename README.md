@@ -1,6 +1,7 @@
 # uecprds
 
-A lightweight Python class for sending simple UECP RDS commands over a serial connection.
+UECPRDS provides a small Python library and helper daemon for sending UECP RDS
+commands over a serial connection.
 
 It implements a framing method that was reverse-engineered from the
 **"EP-RDS v1.2"** Windows tool by *Klabautermann*. Because of this, it
@@ -18,7 +19,9 @@ also work with other RDS encoders that conform to the UECP protocol.
 - Uses simple byte-stuffing by inserting `0xFD` after every `0xFE` or `0xFF` (not the usual UECP escape sequence) and computes a **CRC-16-CCITT**.
 - Simple and readable **serial communication**.
 - Suitable for **automation** and **command-line integration**.
-- The **CT (clock/time) command** is not yet implemented.
+- A ready to use daemon (`rdsd.py`) periodically sends Radiotext and Program Service data based
+  on a YAML configuration file.
+
 
 ---
 
@@ -48,18 +51,36 @@ cd uecprds
 
 ## ▶️ Usage
 
-1. Modify the `example.py` file if needed to customize the RDS parameters.
-2. Run the example script:
+1. Create or modify a YAML configuration file. A sample is provided in
+   `examples/veronica.yml`.
+2. Start the daemon with the configuration:
 
 ```bash
-python3 example.py
+python3 rdsd.py --cfg examples/veronica.yml
+```
+
+### Configuration
+
+The YAML file controls all RDS parameters. Below is an excerpt from
+`examples/veronica.yml` demonstrating the optional `radiotext_file` key.
+When set, `rdsd.py` watches this file and immediately sends its contents as
+Radiotext whenever the file changes.
+
+```yaml
+# 💬 RT (Radiotext) Settings
+radiotext_messages:
+  - "VERONICA"
+  - "JOIN THE CLUB"
+center_radiotext_display: true
+radiotext_file: radiotext.txt
+radiotext_change_interval_seconds: 8
 ```
 
 ---
 
-## 📖 Example
+## 📖 Library Example
 
-The following example demonstrates how to configure and send RDS frames:
+The snippet below shows how to use the `UECPRDS` class directly:
 
 ```python
 from uecprds import UECPRDS
