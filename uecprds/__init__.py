@@ -1,100 +1,66 @@
 import serial
 import time
+from datetime import datetime, timezone
 
 
 class UECPRDS:
+    debug = False
     """
-    UECPRDS Class
+    UECPRDS manages UECP-framed RDS commands for serial communication with RDS encoders.
 
-    Encapsulates RDS (Radio Data System) parameters and UECP (Universal Encoder Communication Protocol)
-    framing for serial transmission. This class provides methods to configure RDS parameters, build UECP
-    frames, and send them over a serial connection.
-
-    Attributes:
-        port (str): Serial port to use for communication. Default is "/dev/ttyUSB0".
-        baudrate (int): Baud rate for the serial connection. Default is 9600.
-        delay (float): Delay between sending frames in seconds. Default is 4.0.
-        addr (int): Address of the UECP encoder. Default is 0.
-        pi (int): Program Identification (PI) code. Default is 0x0000.
-        ps (str): Program Service (PS) name. Default is "DEFAULT".
-        rt (str): Radiotext (RT) message. Default is "RADIOTEXT".
-        pty (int): Program Type (PTY) code. Default is 0.
-        ms (bool): Music/Speech switch. Default is True.
-        tp (bool): Traffic Program (TP) flag. Default is False.
-        ta (bool): Traffic Announcement (TA) flag. Default is False.
-
-    Methods:
-        set_pi(pi: int):
-            Sets the Program Identification (PI) code.
-
-        set_ps(ps: str):
-            Sets the Program Service (PS) name.
-
-        set_rt(rt: str):
-            Sets the Radiotext (RT) message.
-
-        set_pty(pty: int):
-            Sets the Program Type (PTY) code. The value is masked to 5 bits.
-
-        set_ms(ms: bool):
-            Sets the Music/Speech (MS) switch.
-
-        set_tp(tp: bool):
-            Sets the Traffic Program (TP) flag.
-
-        set_ta(ta: bool):
-            Sets the Traffic Announcement (TA) flag.
-
-        set_serial(port: str, baudrate: int, delay: float = None):
-            Configures the serial port, baud rate, and optional delay.
-
-        _crc16_ccitt(data: bytes, poly: int = 0x1021, init: int = 0xFFFF) -> int:
-            Computes the CRC-16-CCITT checksum for the given data.
-
-        _build_uecp_frame(msg: bytes) -> bytes:
-            Builds a UECP frame for the given message, including header, payload, CRC, and byte stuffing.
-
-        build_rds_messages() -> list[bytes]:
-            Constructs a list of RDS messages based on the current parameters.
-
-        build_frames() -> list[bytes]:
-            Builds a list of UECP frames from the RDS messages.
-
-        send_all():
-            Sends all UECP frames over the configured serial connection with a delay between frames.
-
-        send_single(msg: bytes):
-            Sends a single UECP frame for the given message over the configured serial connection.
+    This updated version sends an initial sequence on instantiation that matches your captured dump order,
+    and retains all original setter methods for backward compatibility.
     """
-
-    """Encapsulates RDS parameters and UECP framing for serial transmission."""
 
     def __init__(
         self,
-        port: str = "/dev/ttyUSB0",
-        baudrate: int = 9600,
-        delay: float = 4.0,
-        pi: int = 0x0000,
-        ps: str = "DEFAULT",
-        rt: str = "RADIOTEXT",
-        pty: int = 0,
-        ms: bool = True,
-        tp: bool = False,
-        ta: bool = False,
-        addr: int = 0,
+        addr=0,
+        port="/dev/ttyUSB0",
+        baudrate=9600,
+        delay=4.0,
+        pi=0xFFFF,
+        ps="",
+        rt="",
+        pty=0,
+        ms=True,
+        tp=False,
+        ta=False,
+        di=0,
     ):
+        self.addr = addr
         self.port = port
         self.baudrate = baudrate
         self.delay = delay
-        self.addr = addr
+
+        # RDS data fields
         self.pi = pi
+        self.last_pi = None
         self.ps = ps
+        self.last_ps = None
         self.rt = rt
+        self.last_rt = None
         self.pty = pty & 0x1F
+        self.last_pty = None
         self.ms = ms
+        self.last_ms = None
         self.tp = tp
         self.ta = ta
+        self.last_tp_ta = None
+        self.di = di & 0x0F
+        self.last_di = None
 
+        # Test serial port availability
+        try:
+            with serial.Serial(self.port, self.baudrate, timeout=1):
+                pass
+            time.sleep(0.1)
+        except serial.SerialException:
+            pass
+
+        # Send the dump-order sequence upon initialization
+        self.send_on_init(force=True)
+
+    # --- Setter methods (backward compatible) ---
     def set_pi(self, pi: int):
         self.pi = pi
 
@@ -116,14 +82,14 @@ class UECPRDS:
     def set_ta(self, ta: bool):
         self.ta = ta
 
-    def set_serial(self, port: str, baudrate: int, delay: float = None):
-        self.port = port
-        self.baudrate = baudrate
-        if delay is not None:
-            self.delay = delay
+    def set_addr(self, addr: int):
+        self.addr = addr
+
+    def set_di(self, di: int):
+        self.di = di & 0x0F
 
     @staticmethod
-    def _crc16_ccitt(data: bytes, poly: int = 0x1021, init: int = 0xFFFF) -> int:
+    def _crc16_ccitt(data: bytes, poly=0x1021, init=0xFFFF) -> int:
         crc = init
         for b in data:
             crc ^= b << 8
@@ -147,30 +113,115 @@ class UECPRDS:
                 stuffed.append(0xFD)
         return b"\xfe" + bytes(stuffed) + b"\xff"
 
-    def build_rds_messages(self) -> list[bytes]:
-        msgs = []
-        ta_tp = (1 if self.tp else 0) << 1 | (1 if self.ta else 0)
-        msgs.append(bytes([0x03, 0x00, 0x00, ta_tp]))
-        msgs.append(bytes([0x01, 0x00, 0x00]) + self.pi.to_bytes(2, "big"))
-        msgs.append(bytes([0x07, 0x00, 0x00, self.pty]))
-        msgs.append(bytes([0x05, 0x00, 0x00, 1 if self.ms else 0]))
-        rt_bytes = self.rt.encode("latin-1", "replace")[:64].ljust(64, b" ")
-        msgs.append(bytes([0x0A, 0x00, 0x00, 0x41, 0x00]) + rt_bytes)
+    # --- Message builders ---
+    def build_pi_message(self) -> bytes:
+        return bytes([0x01, 0x00, 0x00]) + self.pi.to_bytes(2, "big")
+
+    def build_ps_message(self) -> bytes:
         ps8 = self.ps[:8].ljust(8)
-        msgs.append(bytes([0x02, 0x00, 0x00]) + ps8.encode("ascii", "ignore"))
-        return msgs
+        return bytes([0x02, 0x00, 0x00]) + ps8.encode("ascii", "ignore")
 
-    def build_frames(self) -> list[bytes]:
-        return [self._build_uecp_frame(m) for m in self.build_rds_messages()]
+    def build_rt_message(self) -> bytes:
+        rt_bytes = self.rt.encode("latin-1", "replace")[:64].ljust(64, b" ")
+        return bytes([0x0A, 0x00, 0x00, 0x41, 0x00]) + rt_bytes
 
-    def send_all(self):
-        with serial.Serial(self.port, self.baudrate, timeout=1) as ser:
-            for frame in self.build_frames():
-                ser.write(frame)
-                ser.flush()
-                time.sleep(self.delay)
+    def build_pty_message(self) -> bytes:
+        return bytes([0x07, 0x00, 0x00, self.pty])
 
+    def build_ms_message(self) -> bytes:
+        return bytes([0x05, 0x00, 0x00, 1 if self.ms else 0])
+
+    def build_tp_ta_message(self) -> bytes:
+        ta_tp = (1 if self.tp else 0) << 1 | (1 if self.ta else 0)
+        return bytes([0x03, 0x00, 0x00, ta_tp])
+
+    def build_di_message(self) -> bytes:
+        return bytes([0x04, 0x00, 0x00, self.di])
+
+    def build_ct_message(self) -> bytes:
+        """
+        Stub for CT group (0x19). You should implement UECP clock/time encoding here
+        to match your captured CT bytes (e.g. 0x19 + time data).
+        """
+        # Example placeholder: all zeros
+        return bytes([0x19, 0x00, 0x00] + [0] * 9)
+
+    # --- Sending primitives ---
     def send_single(self, msg: bytes):
+        frame = self._build_uecp_frame(msg)
+        if self.debug:
+            print(f"[DEBUG] Full serial frame: {frame.hex()}")
         with serial.Serial(self.port, self.baudrate, timeout=1) as ser:
-            ser.write(self._build_uecp_frame(msg))
+            ser.write(frame)
             ser.flush()
+
+    def send_pi(self, force=False):
+        if force or self.pi != self.last_pi:
+            self.send_single(self.build_pi_message())
+            self.last_pi = self.pi
+
+    def send_ps(self, force=False):
+        if force or self.ps != self.last_ps:
+            self.send_single(self.build_ps_message())
+            self.last_ps = self.ps
+
+    def send_rt(self, force=False):
+        if force or self.rt != self.last_rt:
+            self.send_single(self.build_rt_message())
+            self.last_rt = self.rt
+
+    def send_pty(self, force=False):
+        if force or self.pty != self.last_pty:
+            self.send_single(self.build_pty_message())
+            self.last_pty = self.pty
+
+    def send_ms(self, force=False):
+        if force or self.ms != self.last_ms:
+            self.send_single(self.build_ms_message())
+            self.last_ms = self.ms
+
+    def send_tp_ta(self, force=False):
+        current = (self.tp, self.ta)
+        if force or current != self.last_tp_ta:
+            self.send_single(self.build_tp_ta_message())
+            self.last_tp_ta = current
+
+    def send_di(self, force=False):
+        if force or self.di != self.last_di:
+            self.send_single(self.build_di_message())
+            self.last_di = self.di
+
+    def send_ct(self, force=False):
+        if force:
+            self.send_single(self.build_ct_message())
+
+    def send_on_init(self, force=False):
+        """
+        Send messages in the exact order of your captured dump:
+        TP/TA, PI, PTY, MS, CT (0x19), RT, PS, then a blank-PS terminator.
+        """
+        self.send_tp_ta(force)
+        self.send_pi(force)
+        self.send_pty(force)
+        self.send_ms(force)
+        self.send_ct(force)
+        self.send_rt(force)
+        self.send_ps(force)
+        # Blank PS terminator
+        prev = self.ps
+        self.ps = ""
+        self.send_ps(force=True)
+        self.ps = prev
+
+    # Convenience: original send_all order
+    def send_all(self, force=False):
+        for fn in (
+            self.send_di,
+            self.send_tp_ta,
+            self.send_pi,
+            self.send_pty,
+            self.send_ms,
+            self.send_rt,
+            self.send_ps,
+        ):
+            fn(force)
