@@ -20,6 +20,7 @@ radiotext_messages:
   - "VERONICA"
   - "JOIN THE CLUB"
 center_radiotext_display: true
+radiotext_file: radiotext.txt
 radiotext_change_interval_seconds: 8
 
 # 🧠 DI (Decoder Identification) Flags

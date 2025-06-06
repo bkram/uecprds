@@ -55,6 +55,23 @@ cd uecprds
 python3 rdsd.py --cfg examples/veronica.yml
 ```
 
+### Configuration
+
+The YAML file controls all RDS parameters. Below is an excerpt from
+`examples/veronica.yml` demonstrating the optional `radiotext_file` key.
+When set, `rdsd.py` watches this file and immediately sends its contents as
+Radiotext whenever the file changes.
+
+```yaml
+# 💬 RT (Radiotext) Settings
+radiotext_messages:
+  - "VERONICA"
+  - "JOIN THE CLUB"
+center_radiotext_display: true
+radiotext_file: radiotext.txt
+radiotext_change_interval_seconds: 8
+```
+
 ---
 
 ## 📖 Library Example
