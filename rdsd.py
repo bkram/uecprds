@@ -69,12 +69,14 @@ class Config:
     rt_change_interval: float = 10.0
     ps_scroll_speed: float = 0.5
     ps_display_delay: float = 2.0
+    alternate_frequencies: List[int] = field(default_factory=list)
 
     def summary(self) -> str:
         """Return a short summary string with stats about the configuration."""
         ps_count = len(self.program_service_names)
         rt_count = len(self.radiotext_messages)
         rt_file = self.radiotext_file if self.radiotext_file else "None"
+        af_count = len(self.alternate_frequencies)
         di_flags = (
             f"S={int(self.di_stereo)}, "
             f"AH={int(self.di_artificial_head)}, "
@@ -85,7 +87,8 @@ class Config:
             f"Serial: {self.serial_port}@{self.baudrate}, "
             f"PI=0x{self.pi_code:04X}, PTY={self.pty_code}, "
             f"TP={self.tp_flag}, TA={self.ta_flag}, DI: {di_flags}, "
-            f"PS names={ps_count}, RT messages={rt_count}, RT file={rt_file}"
+            f"PS names={ps_count}, RT messages={rt_count}, RT file={rt_file}, "
+            f"AF count={af_count}"
         )
 
     @classmethod
@@ -135,6 +138,9 @@ class Config:
             ps_display_delay=data.get(
                 "ps_display_delay_seconds", default.ps_display_delay
             ),
+            alternate_frequencies=data.get(
+                "alternate_frequencies", default.alternate_frequencies
+            ),
         )
 
 
@@ -171,6 +177,12 @@ class RDSDaemon:
         rds.send_di()
         logging.info(f"DI byte set to 0x{di:02X}")
         logging.info(f"TP={self.config.tp_flag}, TA={self.config.ta_flag}")
+        if self.config.alternate_frequencies:
+            rds.set_af(self.config.alternate_frequencies)
+            rds.send_af()
+            logging.info(
+                f"Sent {len(self.config.alternate_frequencies)} alternate frequencies"
+            )
         return rds
 
     def _generate_scroll_frames(self) -> List[str]:
