@@ -238,7 +238,8 @@ class RDSDaemon:
                             text.center(64) if self.config.center_rt else text.ljust(64)
                         )
                         self._safe_send("rt", payload)
-            time.sleep(1)
+            # Sleep in small increments so stop_event is respected promptly
+            self.stop_event.wait(1)
 
     def _ps_worker(self):
         idx = 0
@@ -248,18 +249,18 @@ class RDSDaemon:
                 idx += 1
                 payload = frame.center(8) if self.config.center_ps else frame.ljust(8)
                 self._safe_send("ps", payload)
-                time.sleep(self.config.ps_scroll_speed)
+                self.stop_event.wait(self.config.ps_scroll_speed)
             else:
                 names = self.config.program_service_names or []
                 if not names:
-                    time.sleep(1)
+                    self.stop_event.wait(1)
                     continue
                 name = names[idx % len(names)]
                 idx += 1
                 payload = name.center(8) if self.config.center_ps else name.ljust(8)
                 self._safe_send("ps", payload)
                 delay = self.config.ps_display_delay if len(names) > 1 else 60
-                time.sleep(delay)
+                self.stop_event.wait(delay)
 
     def run(self):
         threads = [
@@ -270,7 +271,7 @@ class RDSDaemon:
             t.start()
         try:
             while not self.stop_event.is_set():
-                time.sleep(0.5)
+                self.stop_event.wait(0.5)
         except KeyboardInterrupt:
             logging.info("KeyboardInterrupt, stopping...")
         finally:
