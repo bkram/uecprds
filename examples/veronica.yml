@@ -7,6 +7,31 @@ program_service_names:
 program_identification_code: 0x83E1
 program_type_code: 10
 rds_music_flag: true
+tp: true
+ta: false
+alternate_frequencies:
+  - 88400
+  - 88600
+  - 88800
+  - 89200
+  - 90000
+  - 90100
+  - 90900
+  - 91000
+  - 91100
+  - 91200
+  - 93100
+  - 93600
+  - 93700
+  - 93800
+  - 95200
+  - 95300
+  - 97400
+  - 97500
+  - 99200
+  - 99400
+  - 99600
+  - 88200
 
 # 🎶 PS (Program Service) Settings
 center_ps_display: false
