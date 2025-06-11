@@ -26,6 +26,7 @@ class UECPRDS:
         tp=False,
         ta=False,
         di=0,
+        af=None,
     ):
         self.addr = addr
         self.port = port
@@ -48,6 +49,8 @@ class UECPRDS:
         self.last_tp_ta = None
         self.di = di & 0x0F
         self.last_di = None
+        self.af = af or []
+        self.last_af = None
 
         # Test serial port availability
         try:
@@ -87,6 +90,9 @@ class UECPRDS:
 
     def set_di(self, di: int):
         self.di = di & 0x0F
+
+    def set_af(self, af_list):
+        self.af = list(af_list)
 
     @staticmethod
     def _crc16_ccitt(data: bytes, poly=0x1021, init=0xFFFF) -> int:
@@ -137,6 +143,13 @@ class UECPRDS:
 
     def build_di_message(self) -> bytes:
         return bytes([0x04, 0x00, 0x00, self.di])
+
+    def _encode_af(self, freq_khz: int) -> int:
+        return max(1, min(204, int(round((freq_khz - 87500) / 100)) + 1))
+
+    def build_af_message(self) -> bytes:
+        codes = [self._encode_af(f) for f in self.af]
+        return bytes([0x14, 0x00, 0x00, len(codes)]) + bytes(codes)
 
     def build_ct_message(self) -> bytes:
         """
@@ -191,6 +204,11 @@ class UECPRDS:
             self.send_single(self.build_di_message())
             self.last_di = self.di
 
+    def send_af(self, force=False):
+        if force or self.af != self.last_af:
+            self.send_single(self.build_af_message())
+            self.last_af = list(self.af)
+
     def send_ct(self, force=False):
         if force:
             self.send_single(self.build_ct_message())
@@ -207,6 +225,8 @@ class UECPRDS:
         self.send_ct(force)
         self.send_rt(force)
         self.send_ps(force)
+        if self.af:
+            self.send_af(force)
         # Blank PS terminator
         prev = self.ps
         self.ps = ""
@@ -223,5 +243,6 @@ class UECPRDS:
             self.send_ms,
             self.send_rt,
             self.send_ps,
+            self.send_af,
         ):
             fn(force)

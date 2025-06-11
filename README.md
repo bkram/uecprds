@@ -14,7 +14,8 @@ also work with other RDS encoders that conform to the UECP protocol.
 
 ## ✨ Features
 
-- Configure RDS parameters like **PI**, **PS**, **Radiotext**, **PTY**, **TP**, **TA**, and **MS** flags.
+- Configure RDS parameters like **PI**, **PS**, **Radiotext**, **PTY**, **TP**, **TA**, and **MS** flags. You can also provide
+  **Alternative Frequencies (AF)** that will be sent to the encoder.
 - Build and send properly framed **UECP messages**.
 - Uses simple byte-stuffing by inserting `0xFD` after every `0xFE` or `0xFF` (not the usual UECP escape sequence) and computes a **CRC-16-CCITT**.
 - Simple and readable **serial communication**.
@@ -66,7 +67,15 @@ The YAML file controls all RDS parameters. Below is an excerpt from
 When set, `rdsd.py` watches this file and immediately sends its contents as
 Radiotext whenever the file changes.
 
+If you want to broadcast **Alternative Frequencies (AF)**, provide them as a
+list of integers under the `alternate_frequencies` key.
+
 ```yaml
+# 📻 Alternate Frequencies
+alternate_frequencies:
+  - 88400
+  - 88600
+
 # 💬 RT (Radiotext) Settings
 radiotext_messages:
   - "VERONICA"
@@ -97,6 +106,7 @@ rds = UECPRDS(
     ms=True,
     tp=False,
     ta=False,
+    af=[88400, 88600],
 )
 
 # Send all RDS frames to the serial device
