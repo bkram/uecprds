@@ -70,6 +70,24 @@ class Config:
     ps_scroll_speed: float = 0.5
     ps_display_delay: float = 2.0
 
+    def summary(self) -> str:
+        """Return a short summary string with stats about the configuration."""
+        ps_count = len(self.program_service_names)
+        rt_count = len(self.radiotext_messages)
+        rt_file = self.radiotext_file if self.radiotext_file else "None"
+        di_flags = (
+            f"S={int(self.di_stereo)}, "
+            f"AH={int(self.di_artificial_head)}, "
+            f"C={int(self.di_compressed)}, "
+            f"DP={int(self.di_dynamic_pty)}"
+        )
+        return (
+            f"Serial: {self.serial_port}@{self.baudrate}, "
+            f"PI=0x{self.pi_code:04X}, PTY={self.pty_code}, "
+            f"TP={self.tp_flag}, TA={self.ta_flag}, DI: {di_flags}, "
+            f"PS names={ps_count}, RT messages={rt_count}, RT file={rt_file}"
+        )
+
     @classmethod
     def from_yaml(cls, path: Path) -> "Config":
         """
@@ -293,6 +311,7 @@ def main():
     args = parser.parse_args()
     try:
         cfg = Config.from_yaml(args.cfg)
+        logging.info(cfg.summary())
         daemon = RDSDaemon(cfg)
         signal.signal(signal.SIGINT, lambda s, f: daemon.stop())
         signal.signal(signal.SIGTERM, lambda s, f: daemon.stop())
