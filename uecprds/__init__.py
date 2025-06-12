@@ -1,248 +1,159 @@
 import serial
 import time
-from datetime import datetime, timezone
-
+import datetime
 
 class UECPRDS:
-    debug = False
     """
-    UECPRDS manages UECP-framed RDS commands for serial communication with RDS encoders.
-
-    This updated version sends an initial sequence on instantiation that matches your captured dump order,
-    and retains all original setter methods for backward compatibility.
+    Profline-compliant UECPRDS encoder (strict initialization ordering)
     """
 
-    def __init__(
-        self,
-        addr=0,
-        port="/dev/ttyUSB0",
-        baudrate=9600,
-        delay=4.0,
-        pi=0xFFFF,
-        ps="",
-        rt="",
-        pty=0,
-        ms=True,
-        tp=False,
-        ta=False,
-        di=0,
-        af=None,
-    ):
-        self.addr = addr
+    def __init__(self, port, baudrate, delay, pi, pty, ms, tp, ta, di, debug=False):
         self.port = port
         self.baudrate = baudrate
         self.delay = delay
-
-        # RDS data fields
         self.pi = pi
-        self.last_pi = None
-        self.ps = ps
-        self.last_ps = None
-        self.rt = rt
-        self.last_rt = None
-        self.pty = pty & 0x1F
-        self.last_pty = None
+        self.pty = pty
         self.ms = ms
-        self.last_ms = None
         self.tp = tp
         self.ta = ta
-        self.last_tp_ta = None
-        self.di = di & 0x0F
-        self.last_di = None
-        self.af = af or []
-        self.last_af = None
+        self.di = di
+        self.debug = debug
 
-        # Test serial port availability
-        try:
-            with serial.Serial(self.port, self.baudrate, timeout=1):
-                pass
-            time.sleep(0.1)
-        except serial.SerialException:
-            pass
+    # --- Main public entry point for startup ---
+    def send_static_init(self):
+        self.send_tp_ta()
+        self.send_pi()
+        self.send_pty()
+        self.send_ms()
+        self.send_di()
 
-        # Send the dump-order sequence upon initialization
-        self.send_on_init(force=True)
+    def send_af(self, af_list):
+        payload = self.build_af_payload(af_list)
+        self.send_message(self.build_group(0x13, payload))
 
-    # --- Setter methods (backward compatible) ---
-    def set_pi(self, pi: int):
-        self.pi = pi
+    def send_ps(self, text):
+        ps = text[:8].ljust(8)
+        self.send_message(self.build_group(0x02, ps.encode("ascii", "replace")))
 
-    def set_ps(self, ps: str):
-        self.ps = ps
+    def send_rt(self, text):
+        rt_data = text.encode("latin-1", "replace")[:64].ljust(64, b" ")
+        payload = b"\x41\x00" + rt_data
+        self.send_message(self.build_group(0x0A, payload))
 
-    def set_rt(self, rt: str):
-        self.rt = rt
+    def send_ct_profline(self, dt: datetime.datetime):
+        payload = bytearray([
+            dt.year % 100,
+            dt.month,
+            dt.day,
+            dt.hour,
+            dt.minute,
+            dt.second,
+            0x00, 0x00
+        ])
+        self.send_message(self.build_group(0x0D19, payload))
 
-    def set_pty(self, pty: int):
-        self.pty = pty & 0x1F
+    # --- Group builders ---
+    def send_tp_ta(self):
+        val = ((1 if self.tp else 0) << 1) | (1 if self.ta else 0)
+        self.send_message(self.build_group(0x03, bytes([val])))
 
-    def set_ms(self, ms: bool):
-        self.ms = ms
+    def send_pi(self):
+        self.send_message(self.build_group(0x01, self.pi.to_bytes(2, "big")))
 
-    def set_tp(self, tp: bool):
-        self.tp = tp
+    def send_pty(self):
+        self.send_message(self.build_group(0x07, bytes([self.pty])))
 
-    def set_ta(self, ta: bool):
-        self.ta = ta
+    def send_ms(self):
+        self.send_message(self.build_group(0x05, bytes([1 if self.ms else 0])))
 
-    def set_addr(self, addr: int):
-        self.addr = addr
+    def send_di(self):
+        self.send_message(self.build_group(0x04, bytes([self.di])))
 
-    def set_di(self, di: int):
-        self.di = di & 0x0F
+    # --- AF Logic ---
+    def build_af_payload(self, af_list):
+        encoded_afs = []
+        for f in af_list:
+            try:
+                encoded_afs.append(self.encode_af(f))
+            except Exception as e:
+                print(f"[AF ENCODE ERROR] {f} MHz skipped: {e}")
 
-    def set_af(self, af_list):
-        self.af = list(af_list)
+        if len(encoded_afs) == 1:
+            return self.build_af_method_05(encoded_afs)
+        elif 2 <= len(encoded_afs) <= 3:
+            return self.build_af_method_07(encoded_afs)
+        elif 4 <= len(encoded_afs) <= 11:
+            return self.build_af_method_0f(encoded_afs)
+        else:
+            print("[WARN] Invalid AF list length")
+            return b''
 
-    @staticmethod
-    def _crc16_ccitt(data: bytes, poly=0x1021, init=0xFFFF) -> int:
+    def encode_af(self, freq_mhz):
+        if not (87.6 <= freq_mhz <= 107.9):
+            raise ValueError(f"AF {freq_mhz} MHz outside valid range.")
+        af_code = int(round((freq_mhz - 87.5) * 10))
+        if not (1 <= af_code <= 204):
+            raise ValueError(f"AF code {af_code} invalid.")
+        return af_code
+
+    def build_af_method_05(self, encoded_afs):
+        payload = bytearray([0x05, 0x00, 0x00, 0xE1])
+        payload.append(encoded_afs[0])
+        payload += b'\x00\x60'
+        return payload
+
+    def build_af_method_07(self, encoded_afs):
+        payload = bytearray([0x07, 0x00, 0x00])
+        payload.append(0xE0 + len(encoded_afs))
+        payload.extend(encoded_afs)
+        payload.extend([0x00] * (3 - len(encoded_afs)))
+        payload += b'\x00\xD3' if len(encoded_afs) == 2 else b'\x00\xEE'
+        return payload
+
+    def build_af_method_0f(self, encoded_afs):
+        payload = bytearray([0x0F, 0x00, 0x00, 0xEB])
+        payload.extend(encoded_afs)
+        payload.extend([0x00] * (11 - len(encoded_afs)))
+        payload += b'\x00\xAC'
+        return payload
+
+    # --- UECP Core Framing ---
+    def build_group(self, mec, data):
+        if mec > 0xFF:
+            header = bytes([(mec >> 8) & 0xFF, mec & 0xFF, 0x00])
+        else:
+            header = bytes([mec, 0x00, 0x00])
+        return header + data
+
+    def send_message(self, msg):
+        frame = self.build_frame(msg)
+        if self.debug:
+            print(f"[UECP HEX] {frame.hex()}")
+        with serial.Serial(self.port, self.baudrate, timeout=1) as ser:
+            ser.write(frame)
+            ser.flush()
+            time.sleep(self.delay)
+
+    def build_frame(self, msg):
+        header = b'\x00\x00\x00' + bytes([len(msg)])
+        payload = header + msg
+        crc = self.crc16(payload)
+        full = payload + crc.to_bytes(2, 'big')
+        stuffed = self.byte_stuff(full)
+        return b'\xfe' + stuffed + b'\xff'
+
+    def crc16(self, data, poly=0x1021, init=0xFFFF):
         crc = init
         for b in data:
             crc ^= b << 8
             for _ in range(8):
-                crc = (
-                    ((crc << 1) ^ poly) & 0xFFFF
-                    if crc & 0x8000
-                    else (crc << 1) & 0xFFFF
-                )
+                crc = ((crc << 1) ^ poly) & 0xFFFF if crc & 0x8000 else (crc << 1) & 0xFFFF
         return crc ^ 0xFFFF
 
-    def _build_uecp_frame(self, msg: bytes) -> bytes:
-        hdr = self.addr.to_bytes(2, "big") + bytes([0x00, len(msg)])
-        payload = hdr + msg
-        crc = self._crc16_ccitt(payload)
-        framed = payload + crc.to_bytes(2, "big")
+    def byte_stuff(self, data):
         stuffed = bytearray()
-        for b in framed:
+        for b in data:
             stuffed.append(b)
             if b in (0xFE, 0xFF):
                 stuffed.append(0xFD)
-        return b"\xfe" + bytes(stuffed) + b"\xff"
-
-    # --- Message builders ---
-    def build_pi_message(self) -> bytes:
-        return bytes([0x01, 0x00, 0x00]) + self.pi.to_bytes(2, "big")
-
-    def build_ps_message(self) -> bytes:
-        ps8 = self.ps[:8].ljust(8)
-        return bytes([0x02, 0x00, 0x00]) + ps8.encode("ascii", "ignore")
-
-    def build_rt_message(self) -> bytes:
-        rt_bytes = self.rt.encode("latin-1", "replace")[:64].ljust(64, b" ")
-        return bytes([0x0A, 0x00, 0x00, 0x41, 0x00]) + rt_bytes
-
-    def build_pty_message(self) -> bytes:
-        return bytes([0x07, 0x00, 0x00, self.pty])
-
-    def build_ms_message(self) -> bytes:
-        return bytes([0x05, 0x00, 0x00, 1 if self.ms else 0])
-
-    def build_tp_ta_message(self) -> bytes:
-        ta_tp = (1 if self.tp else 0) << 1 | (1 if self.ta else 0)
-        return bytes([0x03, 0x00, 0x00, ta_tp])
-
-    def build_di_message(self) -> bytes:
-        return bytes([0x04, 0x00, 0x00, self.di])
-
-    def _encode_af(self, freq_khz: int) -> int:
-        return max(1, min(204, int(round((freq_khz - 87500) / 100)) + 1))
-
-    def build_af_message(self) -> bytes:
-        codes = [self._encode_af(f) for f in self.af]
-        return bytes([0x14, 0x00, 0x00, len(codes)]) + bytes(codes)
-
-    def build_ct_message(self) -> bytes:
-        """
-        Stub for CT group (0x19). You should implement UECP clock/time encoding here
-        to match your captured CT bytes (e.g. 0x19 + time data).
-        """
-        # Example placeholder: all zeros
-        return bytes([0x19, 0x00, 0x00] + [0] * 9)
-
-    # --- Sending primitives ---
-    def send_single(self, msg: bytes):
-        frame = self._build_uecp_frame(msg)
-        if self.debug:
-            print(f"[DEBUG] Full serial frame: {frame.hex()}")
-        with serial.Serial(self.port, self.baudrate, timeout=1) as ser:
-            ser.write(frame)
-            ser.flush()
-
-    def send_pi(self, force=False):
-        if force or self.pi != self.last_pi:
-            self.send_single(self.build_pi_message())
-            self.last_pi = self.pi
-
-    def send_ps(self, force=False):
-        if force or self.ps != self.last_ps:
-            self.send_single(self.build_ps_message())
-            self.last_ps = self.ps
-
-    def send_rt(self, force=False):
-        if force or self.rt != self.last_rt:
-            self.send_single(self.build_rt_message())
-            self.last_rt = self.rt
-
-    def send_pty(self, force=False):
-        if force or self.pty != self.last_pty:
-            self.send_single(self.build_pty_message())
-            self.last_pty = self.pty
-
-    def send_ms(self, force=False):
-        if force or self.ms != self.last_ms:
-            self.send_single(self.build_ms_message())
-            self.last_ms = self.ms
-
-    def send_tp_ta(self, force=False):
-        current = (self.tp, self.ta)
-        if force or current != self.last_tp_ta:
-            self.send_single(self.build_tp_ta_message())
-            self.last_tp_ta = current
-
-    def send_di(self, force=False):
-        if force or self.di != self.last_di:
-            self.send_single(self.build_di_message())
-            self.last_di = self.di
-
-    def send_af(self, force=False):
-        if force or self.af != self.last_af:
-            self.send_single(self.build_af_message())
-            self.last_af = list(self.af)
-
-    def send_ct(self, force=False):
-        if force:
-            self.send_single(self.build_ct_message())
-
-    def send_on_init(self, force=False):
-        """
-        Send messages in the exact order of your captured dump:
-        TP/TA, PI, PTY, MS, CT (0x19), RT, PS, then a blank-PS terminator.
-        """
-        self.send_tp_ta(force)
-        self.send_pi(force)
-        self.send_pty(force)
-        self.send_ms(force)
-        self.send_ct(force)
-        self.send_rt(force)
-        self.send_ps(force)
-        if self.af:
-            self.send_af(force)
-        # Blank PS terminator
-        prev = self.ps
-        self.ps = ""
-        self.send_ps(force=True)
-        self.ps = prev
-
-    # Convenience: original send_all order
-    def send_all(self, force=False):
-        for fn in (
-            self.send_di,
-            self.send_tp_ta,
-            self.send_pi,
-            self.send_pty,
-            self.send_ms,
-            self.send_rt,
-            self.send_ps,
-            self.send_af,
-        ):
-            fn(force)
+        return bytes(stuffed)
