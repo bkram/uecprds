@@ -3,11 +3,35 @@ import time
 import datetime
 
 class UECPRDS:
-    """
-    Profline-compliant UECPRDS encoder (strict initialization ordering)
-    """
+    """Profline-compliant UECPRDS encoder (strict initialization ordering)."""
 
     def __init__(self, port, baudrate, delay, pi, pty, ms, tp, ta, di, debug=False):
+        """Create a new :class:`UECPRDS` instance.
+
+        Parameters
+        ----------
+        port : str
+            Serial port device path.
+        baudrate : int
+            Serial baud rate.
+        delay : float
+            Delay in seconds between writes.
+        pi : int
+            Program Identification code.
+        pty : int
+            Program Type value.
+        ms : bool
+            Music/Speech flag.
+        tp : bool
+            Traffic Program flag.
+        ta : bool
+            Traffic Announcement flag.
+        di : int
+            Decoder Information byte.
+        debug : bool, optional
+            When ``True`` print hexadecimal UECP frames that are sent.
+        """
+
         self.port = port
         self.baudrate = baudrate
         self.delay = delay
@@ -21,6 +45,7 @@ class UECPRDS:
 
     # --- Main public entry point for startup ---
     def send_static_init(self):
+        """Send TP/TA, PI, PTY, MS and DI frames to initialise the encoder."""
         self.send_tp_ta()
         self.send_pi()
         self.send_pty()
@@ -28,19 +53,47 @@ class UECPRDS:
         self.send_di()
 
     def send_af(self, af_list):
+        """Send alternative frequencies.
+
+        Parameters
+        ----------
+        af_list : Iterable[float]
+            List of AF frequencies in MHz.
+        """
         payload = self.build_af_payload(af_list)
         self.send_message(self.build_group(0x13, payload))
 
     def send_ps(self, text):
+        """Send Program Service name.
+
+        Parameters
+        ----------
+        text : str
+            Up to 8 ASCII characters to display.
+        """
         ps = text[:8].ljust(8)
         self.send_message(self.build_group(0x02, ps.encode("ascii", "replace")))
 
     def send_rt(self, text):
+        """Send Radiotext message.
+
+        Parameters
+        ----------
+        text : str
+            Text to send (truncated to 64 characters).
+        """
         rt_data = text.encode("latin-1", "replace")[:64].ljust(64, b" ")
         payload = b"\x41\x00" + rt_data
         self.send_message(self.build_group(0x0A, payload))
 
     def send_ct_profline(self, dt: datetime.datetime):
+        """Send clock time using the Profline proprietary group.
+
+        Parameters
+        ----------
+        dt : datetime.datetime
+            Current datetime to encode.
+        """
         payload = bytearray([
             dt.year % 100,
             dt.month,
@@ -54,19 +107,24 @@ class UECPRDS:
 
     # --- Group builders ---
     def send_tp_ta(self):
+        """Send the Traffic Program and Traffic Announcement flags."""
         val = ((1 if self.tp else 0) << 1) | (1 if self.ta else 0)
         self.send_message(self.build_group(0x03, bytes([val])))
 
     def send_pi(self):
+        """Send the Program Identification code."""
         self.send_message(self.build_group(0x01, self.pi.to_bytes(2, "big")))
 
     def send_pty(self):
+        """Send the Program Type code."""
         self.send_message(self.build_group(0x07, bytes([self.pty])))
 
     def send_ms(self):
+        """Send the Music/Speech flag."""
         self.send_message(self.build_group(0x05, bytes([1 if self.ms else 0])))
 
     def send_di(self):
+        """Send the Decoder Information byte."""
         self.send_message(self.build_group(0x04, bytes([self.di])))
 
     # --- AF Logic ---
@@ -126,6 +184,7 @@ class UECPRDS:
         return header + data
 
     def send_message(self, msg):
+        """Write a prepared UECP group to the serial port."""
         frame = self.build_frame(msg)
         if self.debug:
             print(f"[UECP HEX] {frame.hex()}")
