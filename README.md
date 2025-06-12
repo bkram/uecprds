@@ -29,12 +29,12 @@ also work with other RDS encoders that conform to the UECP protocol.
 ## 📋 Requirements
 
 - **Python 3**
-- **`pyserial` library**
+- **`pyserial` and `pyyaml` libraries**
 
-To install the required library on Ubuntu/Debian:
+Install the dependencies with `pip`:
 
 ```bash
-sudo apt install python3-serial
+pip install -r requirements.txt
 ```
 
 ---
@@ -53,68 +53,42 @@ cd uecprds
 ## ▶️ Usage
 
 1. Create or modify a YAML configuration file. A sample is provided in
-   `examples/veronica.yml`.
+   `examples/config.yml`.
 2. Start the daemon with the configuration:
 
 ```bash
-python3 rdsd.py --cfg examples/veronica.yml
+python3 rdsd.py --cfg examples/config.yml
 ```
 
 ### Configuration
 
 The YAML file controls all RDS parameters. Below is an excerpt from
-`examples/veronica.yml` demonstrating the optional `radiotext_file` key.
-When set, `rdsd.py` watches this file and immediately sends its contents as
-Radiotext whenever the file changes.
+`examples/config.yml` demonstrating the optional `file` key in the
+`display.rt` section. When set, `rdsd.py` watches this file and immediately
+sends its contents as Radiotext whenever the file changes.
 
-If you want to broadcast **Alternative Frequencies (AF)**, provide them as a
-list of integers under the `alternate_frequencies` key.
+To broadcast **Alternative Frequencies (AF)**, enable the `af` section and
+provide a list of frequencies under the `alternate_frequencies` key.
 
 ```yaml
 # 📻 Alternate Frequencies
-alternate_frequencies:
-  - 88400
-  - 88600
+af:
+  enable: true
+  alternate_frequencies:
+    - 92.4
+    - 93.9
 
 # 💬 RT (Radiotext) Settings
-radiotext_messages:
-  - "VERONICA"
-  - "JOIN THE CLUB"
-center_radiotext_display: true
-radiotext_file: radiotext.txt
-radiotext_change_interval_seconds: 8
+display:
+  rt:
+    messages:
+      - "VERONICA"
+      - "JOIN THE CLUB"
+    center: true
+    file: radiotext.txt
+    change_interval_seconds: 8
 ```
-
 ---
-
-## 📖 Library Example
-
-The snippet below shows how to use the `UECPRDS` class directly:
-
-```python
-from uecprds import UECPRDS
-
-# Create UECPRDS instance
-rds = UECPRDS(
-    port="/dev/ttyUSB0",
-    baudrate=9600,
-    delay=2.0,
-    pi=0x1234,
-    ps="ITALO FM",
-    rt="Now playing: Italo Disco Hits",
-    pty=10,
-    ms=True,
-    tp=False,
-    ta=False,
-    af=[88400, 88600],
-)
-
-# Send all RDS frames to the serial device
-rds.send_all()
-```
-
----
-
 ## 🛠️ Development
 
 Feel free to contribute to this project by submitting issues or pull requests.
