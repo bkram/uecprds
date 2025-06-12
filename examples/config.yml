@@ -1,0 +1,64 @@
+serial:
+  port: "/dev/ttyUSB0"
+  baudrate: 9600
+  delay_seconds: 1.0
+
+station:
+  program_identification_code: 0x1337
+  program_type_code: 15 # Pop Music
+  rds_music_flag: true
+  tp: true # Traffic Program enabled
+  ta: false # Traffic Announcement initially disabled
+
+display:
+  ps:
+    texts: # PS is 8 characters, ensure all messages are 8.
+      - "PROFLINE" 
+      - "SFM" 
+      - "RDS"
+      - "CODER"
+      - "DEMO"
+
+    center: false # PS is typically left-aligned or dynamic
+    scroll_enabled: true # Enable scrolling for PS
+    scroll_bidirectional: false # Scroll in one direction (e.g., right to left)
+    scroll_speed_seconds: .5 # Speed of PS scroll (e.g., 1 character per second)
+    display_delay_seconds: 5 # How long each PS text remains static before next scroll/change
+  rt:
+    messages:
+      - "Profline UECP RDS Encoder"
+      - "Full Python UECP RDS stack"
+      - "TP/TA, MS, PTY, DI control"
+      - "AF encoding: 1-11 frequencies"
+      - "PS scrolling & rotation"
+      - "Radiotext file monitoring"
+      - "Fully Profline compliant"
+
+    file: "radiotext.txt" # This can be used to dynamically load RT, alongside or instead of 'messages'
+    center: true # Center Radio Text on display if supported by receiver
+    change_interval_seconds: 10 # Rotate RT messages every 10 seconds
+
+flags:
+  di: # Decoder Information
+    stereo: true
+    compressed: true # Assuming no audio compression in RDS, typically for very low bandwidth audio
+    artificial_head: false
+    dynamic_pty: false # PTY is not changing dynamically
+
+clock:
+  enable: true
+  interval_seconds: 30 # Update clock every 30 seconds
+  # Current time for initial setup (assuming this is managed by the sending application)
+  # current_time_datetime: 2025-06-12T22:01:00 # Example of how a sending app might inject this
+
+af:
+  enable: true
+  alternate_frequencies: # Max 11 AFs, in MHz
+    - 92.4
+    - 93.9
+    - 97.2
+    - 97.4
+    - 99.2
+    - 104.9
+    - 106.7
+    - 107.4
