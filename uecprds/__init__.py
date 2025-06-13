@@ -94,16 +94,19 @@ class UECPRDS:
         dt : datetime.datetime
             Current datetime to encode.
         """
-        payload = bytearray([
-            dt.year % 100,
-            dt.month,
-            dt.day,
-            dt.hour,
-            dt.minute,
-            dt.second,
-            0x00, 0x00
+        # Construct the complete MEC+GroupType+Data bytes directly,
+        # mirroring the successful Go implementation.
+        ct_payload_data = bytearray([
+            0x0D,       # MEC MSB (for 0x0D19)
+            0x19,       # MEC LSB (for 0x0D19)
+            0x06,       # Group Type (specific to Profline CT)
+            dt.day,     # Day of the month
+            dt.hour,    # Hour
+            dt.minute,  # Minute
+            dt.second,  # Second
+            0x00, 0x00  # Two padding bytes as per Profline spec
         ])
-        self.send_message(self.build_group(0x0D19, payload))
+        self.send_message(ct_payload_data) # Send this full payload directly
 
     # --- Group builders ---
     def send_tp_ta(self):
@@ -177,14 +180,21 @@ class UECPRDS:
 
     # --- UECP Core Framing ---
     def build_group(self, mec, data):
+        # This function builds the MEC + GroupType + Data structure for standard groups.
+        # For MECs > 0xFF (like 0x0D19), the GroupType (third byte) is NOT always 0x00.
+        # However, for *standard* UECP groups where MEC > 0xFF, the GroupType often is 0x00.
+        # The `send_ct_profline` function now bypasses this by building its specific
+        # MEC + GroupType + Data payload directly.
         if mec > 0xFF:
+            # Assuming GroupType is 0x00 for other non-CT 2-byte MECs
             header = bytes([(mec >> 8) & 0xFF, mec & 0xFF, 0x00])
         else:
+            # For 1-byte MECs, structure is MEC, GroupType (0x00), padding (0x00)
             header = bytes([mec, 0x00, 0x00])
         return header + data
 
     def send_message(self, msg):
-        """Write a prepared UECP group to the serial port."""
+        """Write a prepared UECP group (or full MEC+GroupType+Data payload) to the serial port."""
         frame = self.build_frame(msg)
         if self.debug:
             print(f"[UECP HEX] {frame.hex()}")

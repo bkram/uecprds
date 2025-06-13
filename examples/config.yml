@@ -26,16 +26,18 @@ display:
     display_delay_seconds: 5 # How long each PS text remains static before next scroll/change
   rt:
     messages:
-      - "Profline UECP RDS Encoder"
-      - "Full Python UECP RDS stack"
+      - "Modern Profline UECP RDS Encoder Software"
+      - "Multi Platform Support"
+      - "Full RDS stack"
       - "TP/TA, MS, PTY, DI control"
       - "AF encoding: 1-11 frequencies"
       - "PS scrolling & rotation"
+      - "CT Time sending"
       - "Radiotext file monitoring"
-      - "Fully Profline compliant"
+      - "Fully Profline SFM tested"
 
     file: "radiotext.txt" # This can be used to dynamically load RT, alongside or instead of 'messages'
-    center: true # Center Radio Text on display if supported by receiver
+    center: false # Center Radio Text on display if supported by receiver
     change_interval_seconds: 10 # Rotate RT messages every 10 seconds
 
 flags:
