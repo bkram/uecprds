@@ -8,15 +8,11 @@ import (
 )
 
 func main() {
-	rds := uecprds.New("/dev/ttyUSB0", 9600, time.Second)
-	if err := rds.Open(); err != nil {
-		log.Fatalf("open serial: %v", err)
+	rds := uecprds.New("/dev/ttyUSB0", 9600, time.Second, 0x1337, 15, true, true, false, 0x00, false)
+	if err := rds.SendStaticInit(); err != nil {
+		log.Fatalf("init: %v", err)
 	}
-	defer rds.Close()
-
-	// Example frame - in a real application build a proper UECP frame.
-	frame := []byte{0x00, 0x00}
-	if err := rds.Send(frame); err != nil {
-		log.Fatalf("send: %v", err)
+	if err := rds.SendPS("DEMO"); err != nil {
+		log.Fatalf("ps: %v", err)
 	}
 }

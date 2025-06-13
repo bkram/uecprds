@@ -93,6 +93,41 @@ display:
 
 Feel free to contribute to this project by submitting issues or pull requests.
 
+### Go Version
+
+The repository also ships a Go implementation of the daemon with functionality
+similar to the Python version. You can build and test it without installing any
+extra packages because the external
+`go.bug.st/serial` dependency is replaced with a local stub (see `go.mod` and
+the `serialstub` directory).
+Python and Go unit tests verify that generated UECP frames match expected
+hex strings. Python tests live in `tests/` and the Go tests are under
+`pkg/uecprds`.
+
+Compile the binary:
+
+```bash
+go build ./cmd/rdsd
+```
+
+Run the program directly:
+
+```bash
+go run cmd/rdsd/main.go
+```
+
+Execute the Go unit tests:
+
+```bash
+go test ./...
+```
+
+Run the Python unit tests:
+
+```bash
+python3 -m unittest discover
+```
+
 ---
 
 ## 📜 License

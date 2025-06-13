@@ -1,4 +1,9 @@
-import serial
+try:
+    import serial  # type: ignore
+except ImportError:  # pyserial not installed
+    from serialstub import Serial
+    from types import SimpleNamespace
+    serial = SimpleNamespace(Serial=Serial)
 import time
 import datetime
 
